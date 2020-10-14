@@ -314,6 +314,7 @@ int *ComputeDiffStats(char **output, int *lenoutput,unsigned char *sp1, unsigned
 
 	static char *txtreg[5]={"a","b","c","d","e"};
 
+	static int valregA=-1,valregB=-1,valregC=-1,valregD=-1,valregE=-1;
 	struct s_regupdate regupdate[5];
 	struct s_sprval switchspr;
 	struct s_sprval diff[16];
@@ -330,6 +331,10 @@ int *ComputeDiffStats(char **output, int *lenoutput,unsigned char *sp1, unsigned
 	/******************************************************
 	      i n i t i a l i s e    s t a t s
 	******************************************************/
+	if (first) {
+                // reset
+                valregA=valregB=valregC=valregD=valregE=-1;
+	}
 	/* backup reg */
 	for (i=0;i<5;i++) old_reg[i]=current_reg[i];
 	
@@ -467,17 +472,26 @@ printf("**** after optim\n");
 				current_reg[i]=diff[i].val;
 			}
 		}
-		if (diff[0].val==0) diff_printf(output,lenoutput,"xor a\n"); else
-		if (diff[0].val>0) diff_printf(output,lenoutput,"ld a,%d\n",diff[0].val);
+		if (diff[0].val==0) {
+			diff_printf(output,lenoutput,"xor a\n");
+			valregA=diff[0].val;
+		} else if (diff[0].val>0) {
+			diff_printf(output,lenoutput,"ld a,%d\n",diff[0].val);
+			valregA=diff[0].val;
+		}
 		if (diff[1].val>=0 && diff[2].val>=0) diff_printf(output,lenoutput,"ld bc,#%X\n",diff[1].val*256+diff[2].val); else
 		{
 			if (diff[1].val>=0) diff_printf(output,lenoutput,"ld b,%d\n",diff[1].val); else
 			if (diff[2].val>=0) diff_printf(output,lenoutput,"ld c,%d\n",diff[2].val);
+                        valregB=diff[1].val;
+                        valregC=diff[2].val;
 		}
 		if (diff[3].val>=0 && diff[4].val>=0) diff_printf(output,lenoutput,"ld de,#%X\n",diff[3].val*256+diff[4].val); else
 		{
 			if (diff[3].val>=0) diff_printf(output,lenoutput,"ld d,%d\n",diff[3].val);
 			if (diff[4].val>=0) diff_printf(output,lenoutput,"ld e,%d\n",diff[4].val);
+                        valregD=diff[3].val;
+                        valregE=diff[4].val;
 		}
 		//diff_printf(output,lenoutput,"\n");
 		
@@ -532,7 +546,7 @@ printf("**** after optim\n");
 	      u p d a t e
 	******************************************************/
 	if (ireg) {
-		int ib=-1,ic=-1,id=-1,ie=-1;
+		int ia=-1,ib=-1,ic=-1,id=-1,ie=-1;
 
 		diff_printf(output,lenoutput,"; stats update\n");
 //fprintf(stderr,"update\n");		
@@ -540,8 +554,56 @@ printf("**** after optim\n");
 		for (i=0;i<ireg;i++) {
 			switch (regupdate[i].reg) {
 				case 0:
-					/* optimised A */
-					if (!regupdate[i].val) diff_printf(output,lenoutput,"xor a\n"); else diff_printf(output,lenoutput,"ld a,%d\n",regupdate[i].val);
+					/* optimised A v1.4 */
+					ia=i;
+					if (!regupdate[ia].val) {
+						diff_printf(output,lenoutput,"xor a\n");
+					} else if (regupdate[ia].val==((valregA+valregA)&0xFF)) {
+						diff_printf(output,lenoutput,"add a\n");
+					} else if (valregB!=-1 && regupdate[ia].val==((valregA+valregB)&0xFF)) {
+						diff_printf(output,lenoutput,"add b\n");
+					} else if (valregC!=-1 && regupdate[ia].val==((valregA+valregC)&0xFF)) {
+						diff_printf(output,lenoutput,"add c\n");
+					} else if (valregD!=-1 && regupdate[ia].val==((valregA+valregD)&0xFF)) {
+						diff_printf(output,lenoutput,"add d\n");
+					} else if (valregE!=-1 && regupdate[ia].val==((valregA+valregE)&0xFF)) {
+						diff_printf(output,lenoutput,"add e\n");
+					} else if (valregB!=-1 && regupdate[ia].val==((valregA-valregB)&0xFF)) {
+						diff_printf(output,lenoutput,"sub b\n");
+					} else if (valregC!=-1 && regupdate[ia].val==((valregA-valregC)&0xFF)) {
+						diff_printf(output,lenoutput,"sub c\n");
+					} else if (valregD!=-1 && regupdate[ia].val==((valregA-valregD)&0xFF)) {
+						diff_printf(output,lenoutput,"sub d\n");
+					} else if (valregE!=-1 && regupdate[ia].val==((valregA-valregE)&0xFF)) {
+						diff_printf(output,lenoutput,"sub e\n");
+					} else if (regupdate[ia].val==(valregA|valregB)) {
+						diff_printf(output,lenoutput,"or b\n");
+					} else if (regupdate[ia].val==(valregA|valregC)) {
+						diff_printf(output,lenoutput,"or c\n");
+					} else if (regupdate[ia].val==(valregA|valregD)) {
+						diff_printf(output,lenoutput,"or d\n");
+					} else if (regupdate[ia].val==(valregA|valregE)) {
+						diff_printf(output,lenoutput,"or e\n");
+					} else if (regupdate[ia].val==(valregA^valregB)) {
+						diff_printf(output,lenoutput,"xor b\n");
+					} else if (regupdate[ia].val==(valregA^valregC)) {
+						diff_printf(output,lenoutput,"xor c\n");
+					} else if (regupdate[ia].val==(valregA^valregD)) {
+						diff_printf(output,lenoutput,"xor d\n");
+					} else if (regupdate[ia].val==(valregA^valregE)) {
+						diff_printf(output,lenoutput,"xor e\n");
+					} else if (regupdate[ia].val==(valregA&valregB)) {
+						diff_printf(output,lenoutput,"and b\n");
+					} else if (regupdate[ia].val==(valregA&valregC)) {
+						diff_printf(output,lenoutput,"and c\n");
+					} else if (regupdate[ia].val==(valregA&valregD)) {
+						diff_printf(output,lenoutput,"and d\n");
+					} else if (regupdate[ia].val==(valregA&valregE)) {
+						diff_printf(output,lenoutput,"and e\n");
+					} else {
+						diff_printf(output,lenoutput,"ld a,%d\n",regupdate[i].val);
+					}
+					valregA=regupdate[ia].val;
 					break;
 				case 1:ib=i;break;
 				case 2:ic=i;break;
@@ -562,14 +624,18 @@ printf("**** after optim\n");
 				}
 			}
 			if (packed) diff_printf(output,lenoutput,"ld bc,#%X\n",regupdate[ib].val*256+regupdate[ic].val);
+			valregB=regupdate[ib].val;
+                        valregC=regupdate[ic].val;
 		} else {
 			if (ib>=0) {
 				if (regupdate[ib].val==(regupdate[ib].oldval-1)&0xF) diff_printf(output,lenoutput,"dec b\n"); else
 				if (regupdate[ib].val==(regupdate[ib].oldval+1)&0xF) diff_printf(output,lenoutput,"inc b\n"); else diff_printf(output,lenoutput,"ld b,%d\n",regupdate[ib].val);
+				valregB=regupdate[ib].val;
 			}
 			if (ic>=0) {
 				if (regupdate[ic].val==(regupdate[ic].oldval-1)&0xF) diff_printf(output,lenoutput,"dec c\n"); else
 				if (regupdate[ic].val==(regupdate[ic].oldval+1)&0xF) diff_printf(output,lenoutput,"inc c\n"); else diff_printf(output,lenoutput,"ld c,%d\n",regupdate[ic].val);
+                        	valregC=regupdate[ic].val;
 			}
 		}
 		/* try to pack DE */
@@ -585,14 +651,18 @@ printf("**** after optim\n");
 				}
 			}
 			if (packed) diff_printf(output,lenoutput,"ld de,#%X\n",regupdate[id].val*256+regupdate[ie].val);
+                        valregD=regupdate[id].val;
+                        valregE=regupdate[ie].val;
 		} else {
 			if (id>=0) {
 				if (regupdate[id].val==(regupdate[id].oldval-1)&0xF) diff_printf(output,lenoutput,"dec d\n"); else
 				if (regupdate[id].val==(regupdate[id].oldval+1)&0xF) diff_printf(output,lenoutput,"inc d\n"); else diff_printf(output,lenoutput,"ld d,%d\n",regupdate[id].val);
+	                        valregD=regupdate[id].val;
 			}
 			if (ie>=0) {
 				if (regupdate[ie].val==(regupdate[ie].oldval-1)&0xF) diff_printf(output,lenoutput,"dec e\n"); else
 				if (regupdate[ie].val==(regupdate[ie].oldval+1)&0xF) diff_printf(output,lenoutput,"inc e\n"); else diff_printf(output,lenoutput,"ld e,%d\n",regupdate[ie].val);
+                        	valregE=regupdate[ie].val;
 			}
 		}
 	}
@@ -847,6 +917,7 @@ void Usage()
 	printf("-idx <sequence(s)>  define sprite indexes to compute\n");
 	printf("-c     compile a full sprite\n");
 	printf("-d     compile difference between two sprites or a sequence\n");
+	printf("-meta  compile consecutive sprites\n");
 	printf("-noret do not add RET at the end of the routine\n");
 	printf("-inch  add a INC H at the end of the routine\n");
 	printf("-jpix  add a JP (IX) at the end of the routine\n");
