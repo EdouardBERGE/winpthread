@@ -690,8 +690,22 @@ void MakeDiff(char **output, int *lenoutput, struct s_parameter *parameter, unsi
 		ComputeDiffStats(output,lenoutput,sp1,sp2,i,i==0?1:0,current_reg,longueur_flux);
 		if (sp1[i]!=sp2[i]) {
 			if (first) {
-				diff_printf(output,lenoutput,"ld l,%s\n",GetValStr(txtbuffer,current_reg,i));
-				if (sp2[i]==i&0xF) diff_printf(output,lenoutput,"ld (hl),l\n"); else diff_printf(output,lenoutput,"ld (hl),%s\n",GetValStr(txtbuffer,current_reg,sp2[i]));
+				/* first value may be after the first sprite! */
+				diff_printf(output,lenoutput,"ld l,%s\n",GetValStr(txtbuffer,current_reg,i&0xFF));
+				if (sp2[i]==i&0xF) diff_printf(output,lenoutput,"ld (hl),l\n");
+				else {
+					char shortval[32];
+					strcpy(shortval,GetValStr(txtbuffer,current_reg,sp2[i]));
+					if (shortval[0]!='#') {
+						/* register cache */
+						diff_printf(output,lenoutput,"ld (hl),%s\n",shortval);
+					} else {
+						/* try inc/dec optim */
+						if (((sp1[i]+1)&0xF)==sp2[i]) diff_printf(output,lenoutput,"inc (hl)\n"); else
+						if (((sp1[i]-1)&0xF)==sp2[i]) diff_printf(output,lenoutput,"dec (hl)\n"); else
+						diff_printf(output,lenoutput,"ld (hl),%s\n",shortval);
+					}
+				}
 				previous_l_value=i&0xFF;
 				first=0;
 			} else {
@@ -732,7 +746,7 @@ void Compiler(struct s_parameter *parameter)
 	/* fichiers */
 	char filename1[2048],filename2[2048];
 	unsigned char *data1,*data2;
-	int i,j,idx,ok=1;
+	int i,j,ok=1,idx=0;
 	int first=-1,last,iauto=0;
 	FILE *fs;
 	/* sequences */
@@ -748,7 +762,7 @@ void Compiler(struct s_parameter *parameter)
 	char *output=NULL;
 
 	if (parameter->meta) {
-		int len,idx=0;
+		int len;
 
 		fs=fopen(parameter->filename1,"rb");
 		fseek(fs,0,SEEK_END);
