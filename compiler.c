@@ -49,7 +49,7 @@ struct s_parameter {
 	int noret;
 	int meta;
 	int metasize;
-	int jpix, jpiy;
+	int jpix, jpiy, exhlde,jpmode;
 	int animate;
 
 	int *idx1;
@@ -684,6 +684,9 @@ void MakeDiff(char **output, int *lenoutput, struct s_parameter *parameter, unsi
 	char txtbuffer[32];
 	int current_reg[5]={-1,-1,-1,-1,-1};
 
+	if (parameter->exhlde) diff_printf(output,lenoutput,"ex hl,de ; using this you must call the routine with sprite data MSB in D register\n");
+	else diff_printf(output,lenoutput,"; this routine must be called with sprite data MSB in H register (from #40 to #4F)\n");
+
 	if (parameter->animate) {
 		diff_printf(output,lenoutput,".routine{cpt} ld h,HSPADR\n");
 	}
@@ -734,6 +737,7 @@ void MakeDiff(char **output, int *lenoutput, struct s_parameter *parameter, unsi
 	if (!parameter->noret) diff_printf(output,lenoutput,"ret\n");
 	if (parameter->jpix) diff_printf(output,lenoutput,"jp (ix)\n");
 	if (parameter->jpiy) diff_printf(output,lenoutput,"jp (iy)\n");
+	if (parameter->jpmode) diff_printf(output,lenoutput,"jp %s\n",parameter->absolute);
 	diff_printf(output,lenoutput,"\n");
 
 	if (parameter->animate) {
@@ -957,19 +961,28 @@ void Usage()
 	#undef FUNC
 	#define FUNC "Usage"
 	
-	printf("%.*s.exe v1.3 / Edouard BERGE 2020-04\n",(int)(sizeof(__FILENAME__)-3),__FILENAME__);
+	printf("%.*s.exe v1.5 / Edouard BERGE 2023-04\n",(int)(sizeof(__FILENAME__)-3),__FILENAME__);
 	printf("\n");
 	printf("syntaxe is: %.*s file1 [file2] [options]\n",(int)(sizeof(__FILENAME__)-3),__FILENAME__);
 	printf("\n");
 	printf("options:\n");
 	printf("-idx <sequence(s)>  define sprite indexes to compute\n");
+	printf("     sequence can be single values separated by comma\n");
+	printf("      like 0,1,2,3,4 \n");
+	printf("     or interval defined by values and dash\n");
+	printf("      like 0-4  \n");
+	printf("     you may mix indexes\n");
+	printf("      like 1-63,0 ; from 1 to 63 then 0\n");
+	printf("\n");
 	printf("-c                  compile a full sprite\n");
 	printf("-d                  compile difference between two sprites or a sequence\n");
 	printf("-meta <auto|nb>     compile consecutive sprites\n");
 	printf("-noret              do not add RET at the end of the routine\n");
+	printf("-exhlde             add a EX HL,DE at the beginning of the routine\n");
 	printf("-inch               add a INC H at the end of the routine\n");
 	printf("-jpix               add a JP (IX) at the end of the routine\n");
 	printf("-jpiy               add a JP (IY) at the end of the routine\n");
+	printf("-jp <nn>            add a JP <label or address> at the end of the routine\n");
 	printf("-l <label>          insert a numbered label for multi diff\n");
 	printf("-alist              create a full ready-to-use list for animation core\n");
 	printf("\n");
@@ -1065,6 +1078,11 @@ int ParseOptions(char **argv,int argc, struct s_parameter *parameter)
 		parameter->jpix=1;
 	} else if (strcmp(argv[i],"-jpiy")==0) {
 		parameter->jpiy=1;
+	} else if (strcmp(argv[i],"-jp")==0) {
+		parameter->jpmode=1;
+		if (i+1<argc) {
+			parameter->absolute=argv[++i];
+		} else Usage();
 	} else if (argv[i][0]=='-') {
 		switch(argv[i][1])
 		{
@@ -1112,7 +1130,7 @@ void GetParametersFromCommandLine(int argc, char **argv, struct s_parameter *par
 		printf("options -jpix and -jpiy are exclusive\n");
 		exit(-1);
 	}
-	if ((parameter->jpix || parameter->jpiy) && !parameter->noret) {
+	if ((parameter->jpix || parameter->jpiy || parameter->jpmode) && !parameter->noret) {
 		fprintf(stderr,"; disabling RET at the end of the routine\n");
 		parameter->noret=1;
 	}
